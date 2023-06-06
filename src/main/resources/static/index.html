@@ -11,16 +11,18 @@
     <!-- 引入Bootstrap和jQuery依赖库 -->
     <link
             rel="stylesheet"
-            href="bootstrap.min.css"
+            href="css/bootstrap.min.css"
     />
     <script
-            src="jquery.min.js"
+            src="js/jquery.min.js"
             crossorigin="anonymous"
     ></script>
-
-    <!-- 定义CSS样式 -->
+    <link rel="stylesheet"
+          href="css/default.min.css">
+    <script src="js/highlight.min.js"></script>
     <style>
         #chat-box {
+
             height: 500px;
             overflow-y: scroll;
             margin-bottom: 20px;
@@ -37,6 +39,7 @@
             background-color: #e6f2ff;
         }
     </style>
+    <!-- 定义CSS样式 -->
 </head>
 
 <body>
@@ -78,13 +81,13 @@
             var messageHtml = '';
             chatBox.append(msgHead + messageHtml + msgEnd);
             sse.onmessage = function (event) {
-                console.log("event.data="+event.data)
-                if(event.data == '[DONE]'){
+                console.log("event.data=" + event.data)
+                if (event.data == '[DONE]') {
                     sse.close();
-                }else{
+                } else {
                     var data = JSON.parse(event.data);
                     var content = data.choices[0].delta.content;
-                    if(content != undefined){
+                    if (content != undefined) {
                         messageHtml += content;
                     }
                     chatBox.html(msgHead + messageHtml + msgEnd)
