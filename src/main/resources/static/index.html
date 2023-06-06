@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>实时聊天示例</title>
+
+    <!-- 引入Bootstrap和jQuery依赖库 -->
+    <link
+            rel="stylesheet"
+            href="bootstrap.min.css"
+    />
+    <script
+            src="jquery.min.js"
+            crossorigin="anonymous"
+    ></script>
+
+    <!-- 定义CSS样式 -->
+    <style>
+        #chat-box {
+            height: 500px;
+            overflow-y: scroll;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .message.sent {
+            background-color: #e6f2ff;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <h1>AI导师</h1>
+
+    <!-- 聊天窗口 -->
+    <div id="chat-box"></div>
+
+    <!-- 输入框 -->
+    <form>
+        <div class="form-group">
+            <label for="message-input">输入你的消息：</label>
+            <input
+                    type="text"
+                    class="form-control"
+                    id="message-input"
+                    placeholder="请输入消息"
+            />
+        </div>
+        <button type="submit" class="btn btn-primary">发送</button>
+    </form>
+</div>
+
+<!-- 引入JavaScript脚本 -->
+<script>
+    $(document).ready(function () {
+        const messageForm = $("form");
+        // 提交消息
+        messageForm.submit(function (event) {
+            const messageInput = $("#message-input");
+            const chatBox = $("#chat-box");
+            // 获取SSE消息流
+            const sse = new EventSource(
+                "https://s571298n46.zicp.fun/v1/api/completions/getMessage"
+            );
+            var msgHead = '<div class="message">';
+            var msgEnd = '</div>';
+            var messageHtml = '';
+            chatBox.append(msgHead + messageHtml + msgEnd);
+            sse.onmessage = function (event) {
+                console.log("event.data="+event.data)
+                if(event.data == '[DONE]'){
+                    sse.close();
+                }else{
+                    var data = JSON.parse(event.data);
+                    var content = data.choices[0].delta.content;
+                    if(content != undefined){
+                        messageHtml += content;
+                    }
+                    chatBox.html(msgHead + messageHtml + msgEnd)
+                }
+            };
+            event.preventDefault();
+            const message = messageInput.val();
+            if (message) {
+                const postData = {
+                    messages: [
+                        {
+                            content: message,
+                            role: "user",
+                        },
+                    ],
+                    model: "gpt-3.5-turbo",
+                    stream: true,
+                };
+                // 发送POST请求，可以使用$.post()方法进行简化
+                $.ajax({
+                    url: "https://s571298n46.zicp.fun/v1/api/completions/stream",
+                    type: "POST",
+                    data: JSON.stringify(postData),
+                    contentType: "application/json",
+                    dataType: "json",
+                });
+                // 清空消息输入框
+                messageInput.val("");
+                messageInput.focus();
+                // 在聊天窗口中添加发送的消息
+                messageHtml = '<div class="message sent">' + message + "</div>";
+                chatBox.append(messageHtml);
+            }
+        });
+    });
+</script>
+</body>
+</html>
