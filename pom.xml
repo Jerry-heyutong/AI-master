@@ -50,12 +50,6 @@
             <artifactId>netty-all</artifactId>
             <version>4.1.70.Final</version>
         </dependency>
-        <!--<dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http</artifactId>
-            <version>4.1.70.Final</version>
-        </dependency>-->
-        <!--        spring boot/cloud-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -76,14 +70,26 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
             <version>${spring-boot.version}</version>
         </dependency>
-        <!--   <dependency>
-               <groupId>org.springframework.cloud</groupId>
-               <artifactId>spring-cloud-stream</artifactId>
-           </dependency>
-           <dependency>
-               <groupId>org.springframework.cloud</groupId>
-               <artifactId>spring-cloud-starter-stream-kafka</artifactId>
-           </dependency>-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>5.3.3</version>
+        </dependency>
+
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>8.0.25</version>
+        </dependency>
         <dependency>
             <groupId>io.springfox</groupId>
             <artifactId>springfox-swagger2</artifactId>
@@ -94,16 +100,6 @@
             <artifactId>springfox-swagger-ui</artifactId>
             <version>2.9.2</version>
         </dependency>
-        <!--<dependency>
-            <groupId>com.aliyun</groupId>
-            <artifactId>dingtalk</artifactId>
-            <version>${dingtalk-sdk-version}</version>
-        </dependency>
-        <dependency>
-            <groupId>net.guerlab.cloud.dingtalk</groupId>
-            <artifactId>guerlab-cloud-dingtalk-core</artifactId>
-            <version>2022.1.0</version>
-        </dependency>-->
     </dependencies>
     <build>
         <plugins>

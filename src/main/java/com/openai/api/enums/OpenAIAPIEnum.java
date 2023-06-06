@@ -1,4 +1,4 @@
-package com.openai.api;
+package com.openai.api.enums;
 
 public enum OpenAIAPIEnum {
     COMPLETIONS("https://api.openai.com/v1/chat/completions");

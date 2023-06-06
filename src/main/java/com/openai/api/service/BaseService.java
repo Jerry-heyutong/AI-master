@@ -1,11 +1,11 @@
 package com.openai.api.service;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.core.bean.ResultFactory;
 import com.core.bean.chatgpt.GPTResp;
 import com.core.bean.chatgpt.PromptData;
-import com.openai.api.OpenAIAPIEnum;
-import com.openai.api.component.ChatSession;
+import com.openai.api.enums.OpenAIAPIEnum;
+import com.openai.api.network.proxy.LocalProxyConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpEntity;
@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
+import org.springframework.util.ObjectUtils;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -22,9 +23,12 @@ import reactor.netty.http.client.HttpClient;
 import reactor.netty.tcp.ProxyProvider;
 
 import javax.annotation.Resource;
+import javax.validation.constraints.NotNull;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 @Slf4j
 @Service
@@ -32,44 +36,59 @@ import java.util.concurrent.ConcurrentHashMap;
 public class BaseService {
     @Resource
     RestTemplate restTemplate;
+    @Resource
+    LocalProxyConfig.Clash proxyConfig;
 
-    private SseEmitter emitter = new SseEmitter();
-    private String apiKey = "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";
+    /**
+     * apiKey
+     * -- group1
+     * [sse1,sse2,sse3]
+     * -- group1
+     * [sse1,sse2,sse3]
+     */
+    public final Map<String, ConcurrentHashMap<String, ConcurrentLinkedQueue<SseEmitter>>> sessionMap = new ConcurrentHashMap<>(16);
 
-    private static final String LOCAL_PROXY_HOSTNAME = "127.0.0.1"; // 本地Clash代理主机名
-    private static final int LOCAL_PROXY_PORT = 7890; // 本地Clash代理端口
-    public ConcurrentHashMap<String, ChatSession> sessionMap = new ConcurrentHashMap<>(16);
-
-    public String completions(PromptData promptData, String apiKey) {
-        log.info("进入会话.." + promptData.getMessages()[0]);
-        if (apiKey != null) {
-            this.apiKey = apiKey;
-        }
-        ChatSession chatSession;
-        //首先获取上下文
-        if (sessionMap.contains(apiKey)) {
-            chatSession = sessionMap.get(apiKey);
-            PromptData.Content message = chatSession.getPromptData().getMessages()[0];
-            StringBuilder prompts = new StringBuilder(message.getContent());
-            String inputPromt = promptData.getMessages()[0].getContent();
-            prompts.append(inputPromt);
-            promptData.setMessages(promptData.getMessages());
+    public SseEmitter subscribe(String apiKey, String groupId) throws IOException {
+        log.info("emitter in..");
+        if (!sessionMap.containsKey(apiKey)) {
+            ConcurrentLinkedQueue<SseEmitter> queue = new ConcurrentLinkedQueue<>();
+            SseEmitter emitter = new SseEmitter();
+            emitter.onCompletion(() -> queue.remove(emitter));
+            emitter.onTimeout(() -> queue.remove(emitter));
+            queue.add(emitter);
+            ConcurrentHashMap<String, ConcurrentLinkedQueue<SseEmitter>> groupMap = new ConcurrentHashMap<>();
+            groupMap.put(groupId, queue);
+            sessionMap.put(apiKey, groupMap);
+            return emitter;
         } else {
-            chatSession = new ChatSession();
-            chatSession.setPromptData(promptData);
-            chatSession.setApiKey(apiKey);
-            sessionMap.put(chatSession.getApiKey(), chatSession);
+            ConcurrentHashMap<String, ConcurrentLinkedQueue<SseEmitter>> stringConcurrentLinkedQueueConcurrentHashMap = sessionMap.get(apiKey);
+            ConcurrentLinkedQueue<SseEmitter> queue = stringConcurrentLinkedQueueConcurrentHashMap.get(groupId);
+            if (queue == null) {
+                queue = new ConcurrentLinkedQueue<>();
+            }
+            final ConcurrentLinkedQueue<SseEmitter> finalQueue = queue;
+            SseEmitter emitter = new SseEmitter();
+            emitter.onCompletion(() -> finalQueue.remove(emitter));
+            emitter.onTimeout(() -> finalQueue.remove(emitter));
+            queue.add(emitter);
+            stringConcurrentLinkedQueueConcurrentHashMap.put(groupId, queue);
+            return emitter;
         }
+    }
+
+    public String completions(@NotNull PromptData promptData, @NotNull String apiKey) {
+        log.info("进入会话.." + promptData.getMessages()[0]);
         HttpHeaders headers = new HttpHeaders();
         headers.add("Authorization", "Bearer " + apiKey);
         headers.add("Content-Type", "application/json");
         HttpEntity<PromptData> httpEntity = new HttpEntity<>(promptData, headers);
-        log.info(JSONObject.toJSONString(promptData));
+        log.info(JSON.toJSONString(promptData));
         ResponseEntity<JSONObject> jsonObjectResponseEntity = restTemplate.postForEntity(OpenAIAPIEnum.COMPLETIONS.getUrl(), httpEntity, JSONObject.class);
-        log.info(JSONObject.toJSONString(jsonObjectResponseEntity));
+        log.info(JSON.toJSONString(jsonObjectResponseEntity));
         StringBuilder result = new StringBuilder();
-        if (jsonObjectResponseEntity.getBody() != null) {
-            GPTResp resp = JSONObject.parseObject(jsonObjectResponseEntity.getBody().toString(), GPTResp.class);
+        JSONObject body = jsonObjectResponseEntity.getBody();
+        if (body != null) {
+            GPTResp resp = JSON.parseObject(body.toString(), GPTResp.class);
             GPTResp.Choice[] choices = resp.getChoices();
             for (GPTResp.Choice choice : choices) {
                 String text = choice.getMessage().getContent();
@@ -84,27 +103,18 @@ public class BaseService {
         return result.toString();
     }
 
-    public SseEmitter getEvents() {
-        log.info("emitter in..");
-        return emitter;
-    }
-
-    public void completions(PromptData promptData) {
-        log.info("进入请求:" + promptData.toString());
+    public void completions(@NotNull PromptData promptData, @NotNull String uuid, @NotNull String apiKey) {
+        log.info("进入请求:" + promptData.toString() + ";uuid=" + uuid + ";apiKey=" + apiKey);
         promptData.setStream(true);
         HttpClient httpClient = HttpClient.create()
                 .tcpConfiguration(tcpClient -> tcpClient
                         .proxy(proxy -> proxy
                                 .type(ProxyProvider.Proxy.HTTP)
-                                .host(LOCAL_PROXY_HOSTNAME)
-                                .port(LOCAL_PROXY_PORT)));
+                                .host(proxyConfig.getHostname())
+                                .port(proxyConfig.getPort())));
         WebClient webClient = WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
-        emitter.onCompletion(() -> {
-            log.info("sse 已关闭");
-            emitter = new SseEmitter();
-        });
         webClient.post()
                 .uri(OpenAIAPIEnum.COMPLETIONS.getUrl())
                 .contentType(MediaType.APPLICATION_JSON).body(BodyInserters.fromObject(promptData))
@@ -115,7 +125,18 @@ public class BaseService {
                         {
                             try {
                                 log.info(data);
-                                emitter.send(data.getBytes(StandardCharsets.UTF_8));
+                                ConcurrentHashMap<String, ConcurrentLinkedQueue<SseEmitter>> stringConcurrentLinkedQueueConcurrentHashMap = sessionMap.get(apiKey);
+                                if (stringConcurrentLinkedQueueConcurrentHashMap != null) {
+                                    ConcurrentLinkedQueue<SseEmitter> sseEmitters = stringConcurrentLinkedQueueConcurrentHashMap.get(uuid);
+                                    if (sseEmitters == null) {
+                                        subscribe(apiKey, uuid);
+                                    }
+                                    for (SseEmitter emitter : sseEmitters) {
+                                        emitter.send(data.getBytes(StandardCharsets.UTF_8));
+                                    }
+                                } else {
+                                    log.error("未找到会话信息!apikey=" + apiKey);
+                                }
                             } catch (IOException e) {
                                 e.printStackTrace();
                                 log.error(e.getMessage(), e);
