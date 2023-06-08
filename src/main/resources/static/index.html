@@ -51,7 +51,6 @@
 </div>
 
 <!-- 引入JavaScript脚本 -->
-<script src="./js/axios.min.js"></script>
 <script >
     function uuid() {
         let dt = new Date().getTime();
@@ -74,9 +73,9 @@
         }
         const chatBox = $("#chat-box");
         // 提交消息
+        // 获取SSE消息流
+        var groupId = uuid();
         messageForm.submit(function (event) {
-            // 获取SSE消息流
-            var groupId = uuid();
             const sse = new EventSource(apiBaseUrl + "/v1/api/completions/getMessage?apiKey=" + apiKey+"&groupId="+groupId);
             var msgHead = '<div class="message" id="'+groupId+'">';
             var msgEnd = '</div>';
@@ -136,5 +135,6 @@
         });
     });
 </script>
+<script src="./js/axios.min.js"></script>
 </body>
 </html>
