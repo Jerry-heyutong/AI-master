@@ -11,14 +11,12 @@ import com.api.enums.OpenAIAPIEnum;
 import com.api.proxy.LocalProxyConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.BodyInserter;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -28,6 +26,7 @@ import reactor.netty.tcp.ProxyProvider;
 import javax.annotation.Resource;
 import javax.validation.constraints.NotNull;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -71,7 +70,11 @@ public class BaseService {
             emitter.onTimeout(() -> queue.remove(emitter));
             queue.add(emitter);
             group.setClientQueue(queue);
-            group.setPromptData(new PromptData());
+            PromptData promptData = new PromptData();
+            promptData.setStream(true);
+            promptData.setMessages(new ArrayList<>());
+            promptData.setModel("gpt-3.5-turbo");
+            group.setPromptData(promptData);
             groupMap.put(groupId, group);
             sessionMap.put(apiKey, groupMap);
             return emitter;
@@ -98,7 +101,7 @@ public class BaseService {
         log.info("会话信息:" + JSON.toJSONString(promptData));
         ResponseEntity<JSONObject> jsonObjectResponseEntity = restTemplate.postForEntity(OpenAIAPIEnum.COMPLETIONS.getUrl(), httpEntity, JSONObject.class);
         log.info("返回:" + JSON.toJSONString(jsonObjectResponseEntity));
-        StringBuilder result = new StringBuilder();
+        StringBuffer result = new StringBuffer();
         JSONObject body = jsonObjectResponseEntity.getBody();
         if (body != null) {
             GPTResp resp = JSON.parseObject(body.toString(), GPTResp.class);
@@ -128,9 +131,10 @@ public class BaseService {
         WebClient webClient = WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
+        BodyInserter<PromptData, ReactiveHttpOutputMessage> bodyInserter = BodyInserters.fromObject(promptData);
         webClient.post()
                 .uri(OpenAIAPIEnum.COMPLETIONS.getUrl())
-                .contentType(MediaType.APPLICATION_JSON).body(BodyInserters.fromObject(promptData))
+                .contentType(MediaType.APPLICATION_JSON).body(bodyInserter)
                 .header("Authorization", "Bearer " + apiKey)
                 .retrieve()
                 .bodyToFlux(String.class)

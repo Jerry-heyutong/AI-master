@@ -50,7 +50,7 @@
         <label for="message-input">输入你的消息：</label>
         <input type="text" class="form-control" id="message-input" placeholder="请输入消息"/>
     </div>
-    <button type="button" onclick="submit()" class="btn btn-primary">发送</button>
+    <button id="submit" type="button" onclick="submit()" class="btn btn-primary">发送</button>
 </div>
 <!-- 引入JavaScript脚本 -->
 <script>
@@ -61,7 +61,6 @@
             dt = Math.floor(dt / 16);
             return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
         });
-        localStorage.setItem("openai.groupId", uuid);
         return uuid;
     }
 
@@ -70,11 +69,8 @@
         const roleSettingInput = $("#role-setting-input").val();
         localStorage.setItem("openai.apikey", apiKeyInput);
         localStorage.setItem("openai.roleSettingInput", roleSettingInput);
-        let groupId = localStorage.getItem("openai.groupId");
-        if (groupId === undefined || groupId == null) {
-            groupId = uuid();
-            localStorage.setItem("openai.groupId", groupId);
-        }
+        let groupId = uuid();
+        localStorage.setItem("openai.groupId", groupId);
         initSSE(apiKeyInput, groupId)
         //初始化完毕后发送一条角色设定的请求
         sendData(actorData(), apiKeyInput, groupId);
@@ -90,17 +86,18 @@
     }
 
     function initSSE(apiKey, groupId) {
-
         if (apiKey == null || groupId == null) {
             alert("apiKey和groupId为null！");
             return;
         }
-        const chatBox = $("#chat-box");
         const sse = new EventSource(apiBaseUrl + "/v1/api/completions/getMessage?apiKey=" + apiKey + "&groupId=" + groupId);
-        const msgHead = '<div class="message" id="' + groupId + '">';
+        let sessionId = uuid();
+        const msgHead = '<div class="message" id="' + sessionId + '">';
         const msgEnd = '</div>';
-        let getMsg = '';
-        chatBox.html(msgHead + getMsg + msgEnd)
+        const chatBox = $("#chat-box");
+        chatBox.append(msgHead + msgEnd)
+        const answer = $("#"+sessionId);
+        let getMsg = answer.val();
         console.log("getMsg=" + getMsg)
         sse.onmessage = function (event) {
             if (event.data === '[DONE]') {
@@ -110,9 +107,9 @@
                 console.log("content=" + content)
                 if (content !== undefined) {
                     getMsg += content;
-                    console.log("chatbox=" + msgHead + getMsg + msgEnd)
+                    console.log("chatbox=" + getMsg)
                 }
-                chatBox.html(msgHead + getMsg + msgEnd)
+                answer.text(getMsg)
             }
         };
     }
@@ -121,7 +118,7 @@
         let roleSetting = localStorage.getItem("openai.roleSettingInput");
         return {
             content: roleSetting,
-            role: "user",
+            role: "system",
         };
     }
 
@@ -135,56 +132,61 @@
     }
 
     function sendData(contentData, apiKey, groupId) {
-        let sentMsg = ''
-        const chatBox = $("#chat-box");
-        const messageInput = $("#message-input");
         axios.post(
             apiBaseUrl + "/v1/api/completions/stream?apiKey=" + apiKey + "&groupId=" + groupId,
-            JSON.stringify(contentData),
+            contentData,
             {
                 headers: {
                     "Content-Type": "application/json"
                 }
             }
         ).then(() => {
-            // Do something with the response
             // 清空消息输入框
-            messageInput.val("");
-            messageInput.focus();
-            let message = messageInput.val();
-            // 在聊天窗口中添加发送的消息
-            sentMsg = '<div class="message sent" id="' + groupId + '">' + message + "</div>";
-            chatBox.append(sentMsg);
+            $("#message-input").val("");
         })
     }
 
     $(document).ready(function () {
-        let groupId = localStorage.getItem("openai.groupId");
-        if (groupId === undefined || groupId == null) {
-            groupId = uuid();
-            localStorage.setItem("openai.groupId", groupId);
-        }
         let apiKey = localStorage.getItem("openai.apikey");
-        if (apiKey == null) {
+        if (apiKey == null || apiKey.length <=0) {
             alert("请先配置apiKey!");
             return
         }
+        let groupId = uuid();
+        localStorage.setItem("openai.groupId", groupId);
         initSSE(apiKey, groupId);
+        //初始化完毕后发送一条角色设定的请求
+        sendData(actorData(), apiKey, groupId);
     });
+    document.getElementById("message-input").onkeydown = function (event) {
+        // 判断是否按下enter键   enter键的ASCII码值是13
+        if (event.keyCode == 13) {
+            // 给文本框聚焦
+            submit();
+        }
+    }
+
 
     function submit() {
+        
+        //初始化完毕后发送一条角色设定的请求
+        const messageInput = $("#message-input");
+        messageInput.focus();
+        let message = messageInput.val();
+        let sessionId = uuid();
+        let div = '<div class="message sent" id="' + sessionId + '">' + message + "</div>";
+        const chatBox = $("#chat-box");
+        chatBox.append(div)
         let groupId = localStorage.getItem("openai.groupId");
-        if (groupId === undefined || groupId == null) {
-            groupId = uuid();
-            localStorage.setItem("openai.groupId", groupId);
-        }
         let apiKey = localStorage.getItem("openai.apikey");
         if (apiKey == null) {
             alert("请先配置apiKey!");
             return
         }
-        initSSE(apiKey,groupId)
-        sendData(userData(), apiKey, groupId)
+        initSSE(apiKey, groupId)
+        var contentData = userData()
+        sendData(JSON.stringify(contentData), apiKey, groupId);
+
     }
 </script>
 <script src="./js/axios.min.js"></script>

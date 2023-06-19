@@ -11,10 +11,13 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.ObjectUtils;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.Resource;
+import javax.validation.Valid;
+import javax.validation.constraints.NotNull;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,14 +28,18 @@ import java.util.concurrent.ConcurrentHashMap;
 @Api(tags = "openAI接口")
 @Slf4j
 @CrossOrigin
+@Valid
 public class ClientController {
 
     @Resource
     BaseService baseService;
 
     @GetMapping("completions/getMessage")
-    public SseEmitter getEvents(@RequestParam String apiKey, @RequestParam(required = false) String groupId) {
+    public SseEmitter getEvents(@RequestParam @NotNull String apiKey, @RequestParam @NotNull String groupId) {
         try {
+            if (StringUtils.isEmpty(apiKey) || StringUtils.isEmpty(groupId)) {
+                return null;
+            }
             return baseService.createEmitter(apiKey, groupId);
         } catch (IOException e) {
             e.printStackTrace();
@@ -42,20 +49,22 @@ public class ClientController {
 
     @PostMapping("completions/stream")
     @ApiOperation("实时会话接口")
-    void completions(@RequestBody Content content, @RequestParam String groupId, @RequestParam String apiKey) {
+    void completions(@RequestBody Content content, @RequestParam @NotNull String groupId, @RequestParam @NotNull String apiKey) {
+        if (StringUtils.isEmpty(apiKey) || StringUtils.isEmpty(groupId)) {
+            return;
+        }
         ConcurrentHashMap<String, Group> groupMap = baseService.sessionMap.get(apiKey);
         if (groupMap != null) {
             Group group = groupMap.get(groupId);
-            if(group!=null){
+            if (group != null) {
                 PromptData promptData = group.getPromptData();
                 List<Content> messages = promptData.getMessages();
-                if(messages==null){
-                    messages = new ArrayList<>();
+                if (messages != null) {
+                    messages.add(content);
+                    promptData.setMessages(messages);
+                    promptData.setStream(true);
+                    baseService.completions(promptData, groupId, apiKey);
                 }
-                messages.add(content);
-                promptData.setMessages(messages);
-                promptData.setStream(true);
-                baseService.completions(promptData, groupId, apiKey);
             }
         }
     }
